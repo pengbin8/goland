@@ -17,3 +17,10 @@
 模板模式
 外观模式
 
+# 推荐学习站点
+
+https://www.liwenzhou.com/posts/Go/golang-menu/
+https://github.com/coderit666/GoGuide
+https://gin-gonic.com/zh-cn/docs/examples/multipart-urlencoded-binding/
+https://www.cnblogs.com/liwenzhou/p/13629767.html
+https://www.topgoer.com/gin%E6%A1%86%E6%9E%B6/
