@@ -28,5 +28,6 @@
 
 # fanqiang
 
-https://7zy.com.cn/726.html
-https://wwwjs01.com/
+ 1. https://7zy.com.cn/726.html
+ 2. https://wwwjs01.com/
+ 3. https://flm88.blog/s/sg0179
