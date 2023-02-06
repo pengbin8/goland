@@ -35,3 +35,4 @@
  5. https://github.com/yuchuanqicy/Over-The-Wall 免费
  6. https://github.com/jjqqkk/jjqqkk 免费+收费
  7. https://www.4spaces.org/1406.html 自建
+ 8. https://github.com/XX-net/XX-Net 收费
