@@ -28,10 +28,10 @@
 
 # fanqiang
 
- 1. https://7zy.com.cn/726.html
- 2. https://wwwjs01.com/
- 3. https://flm88.blog/s/sg0179
- 4. https://github.com/hwanz/SSR-V2ray-Trojan-vpn
- 5. https://github.com/yuchuanqicy/Over-The-Wall
- 6. https://github.com/jjqqkk/jjqqkk
- 7. https://www.4spaces.org/1406.html
+ 1. https://7zy.com.cn/726.html 免费 
+ 2. https://wwwjs01.com/  收费 
+ 3. https://flm88.blog/s/sg0179 收费
+ 4. https://github.com/hwanz/SSR-V2ray-Trojan-vpn 免费
+ 5. https://github.com/yuchuanqicy/Over-The-Wall 免费
+ 6. https://github.com/jjqqkk/jjqqkk 免费+收费
+ 7. https://www.4spaces.org/1406.html 自建
