@@ -36,3 +36,4 @@
  6. https://github.com/jjqqkk/jjqqkk 免费+收费
  7. https://www.4spaces.org/1406.html 自建
  8. https://github.com/XX-net/XX-Net 收费
+ 9. https://iguge.xyz/ 收费
