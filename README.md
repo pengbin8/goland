@@ -25,6 +25,7 @@
 # https://www.cnblogs.com/liwenzhou/p/13629767.html
 # https://www.topgoer.com/gin%E6%A1%86%E6%9E%B6/
 
+# chatGPT-main.rar 人工智能源码
 
 # fanqiang
 
