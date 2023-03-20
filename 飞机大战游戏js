@@ -184,7 +184,7 @@ setInterval(function() {
 
 
 
-// 2. index.html
+// 2. index.html  修改这个路径 <script src="D:\main.js"></script>
 <!DOCTYPE html>
 <html>
   <head>
