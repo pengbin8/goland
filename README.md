@@ -38,3 +38,6 @@
  7. https://www.4spaces.org/1406.html 自建
  8. https://github.com/XX-net/XX-Net 收费
  9. https://iguge.xyz/ 收费
+
+#python
+1. Python 库让你相见恨晚 https://www.zhihu.com/question/24590883/answer/1220720307
