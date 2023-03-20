@@ -1,1 +1,200 @@
+//1.  main.js
+
+
+// Implement airplane battle game
+// Define variables for game elements
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
+let player = {
+  x: canvas.width / 2,
+  y: canvas.height - 50,
+  width: 50,
+  height: 50,
+  speed: 5,
+  lives: 3,
+  score: 0
+};
+let bullets = [];
+let enemies = [];
+let enemySpeed = 2;
+let enemySpawnRate = 100;
+let enemySpawnCounter = 0;
+
+// Define functions for game logic
+function drawPlayer() {
+  ctx.fillStyle = "blue";
+  ctx.fillRect(player.x, player.y, player.width, player.height);
+}
+
+function movePlayer(direction) {
+  if (direction === "left" && player.x > 0) {
+    player.x -= player.speed;
+  } else if (direction === "right" && player.x < canvas.width - player.width) {
+    player.x += player.speed;
+  }
+}
+
+function drawBullets() {
+  ctx.fillStyle = "red";
+  for (let i = 0; i < bullets.length; i++) {
+    ctx.fillRect(bullets[i].x, bullets[i].y, bullets[i].width, bullets[i].height);
+  }
+}
+
+function moveBullets() {
+  for (let i = 0; i < bullets.length; i++) {
+    bullets[i].y -= 10;
+    if (bullets[i].y < 0) {
+      bullets.splice(i, 1);
+      i--;
+    }
+  }
+}
+
+function drawEnemies() {
+  ctx.fillStyle = "green";
+  for (let i = 0; i < enemies.length; i++) {
+    ctx.fillRect(enemies[i].x, enemies[i].y, enemies[i].width, enemies[i].height);
+  }
+}
+
+function moveEnemies() {
+  for (let i = 0; i < enemies.length; i++) {
+    enemies[i].y += enemySpeed;
+    if (enemies[i].y > canvas.height) {
+      enemies.splice(i, 1);
+      i--;
+    }
+  }
+}
+
+function spawnEnemies() {
+  enemySpawnCounter++;
+  if (enemySpawnCounter === enemySpawnRate) {
+    enemies.push({
+      x: Math.random() * (canvas.width - 50),
+      y: -50,
+      width: 50,
+      height: 50
+    });    
+    enemySpawnCounter = 0;
+  }
+}
+
+function detectCollisions() {
+  for (let i = 0; i < enemies.length; i++) {
+    if (enemies[i]=== undefined || enemies[i].x === undefined) {
+      console.log("enemies[i].x is undefined");
+      continue;
+    }
+    for (let j = 0; j < bullets.length; j++) {
+if (enemies[i]=== undefined || enemies[i].x === undefined) {
+      console.log("enemies[i].x is undefined");
+      continue;
+    }
+
+      if (
+        bullets[j].x < enemies[i].x + enemies[i].width &&
+        bullets[j].x + bullets[j].width > enemies[i].x &&
+        bullets[j].y < enemies[i].y + enemies[i].height &&
+        bullets[j].y + bullets[j].height > enemies[i].y
+      ) {
+        bullets.splice(j, 1);
+        j--;
+        enemies.splice(i, 1);
+        i--;
+        player.score += 10;
+      }
+    }
+if (enemies[i]=== undefined || enemies[i].x === undefined) {
+      console.log("enemies[i].x is undefined");
+      continue;
+    }
+    if (
+      player.x < enemies[i].x + enemies[i].width &&
+      player.x + player.width > enemies[i].x &&
+      player.y < enemies[i].y + enemies[i].height &&
+      player.y + player.height > enemies[i].y
+    ) {
+      enemies.splice(i, 1);
+      i--;
+      player.lives--;
+      if (player.lives === 0) {
+        alert("Game over!");
+        document.location.reload();
+      }
+    }
+  }
+}
+
+
+function drawScore() {
+  ctx.fillStyle = "black";
+  ctx.font = "24px Arial";
+  ctx.fillText("Score: " + player.score, 10, 30);
+}
+
+function drawLives() {
+  ctx.fillStyle = "black";
+  ctx.font = "24px Arial";
+  ctx.fillText("Lives: " + player.lives, canvas.width - 100, 30);
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawPlayer();
+  drawBullets();
+  drawEnemies();
+  drawScore();
+  drawLives();
+  moveBullets();
+  moveEnemies();
+  detectCollisions();
+  if (Math.random() < 0.01) {
+    enemySpeed += 0.1;
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+document.addEventListener("keydown", function(event) {
+  if (event.code === "ArrowLeft") {
+    movePlayer("left");
+  } else if (event.code === "ArrowRight") {
+    movePlayer("right");
+  } else if (event.code === "Space") {
+    bullets.push({
+      x: player.x + player.width / 2 - 2.5,
+      y: player.y,
+      width: 5,
+      height: 10
+    });
+  }
+});
+
+setInterval(function() {
+  enemies.push({
+    x: Math.random() * (canvas.width - 50),
+    y: -50,
+    width: 50,
+    height: 50
+  });
+}, 2000); // Spawn enemies every 2 seconds
+
+
+
+
+// 2. index.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Canvas Game</title>
+  </head>
+  <body>
+    <canvas id="canvas" width="480" height="320"></canvas>
+    <script src="D:\main.js"></script>
+  </body>
+</html>
+
 
