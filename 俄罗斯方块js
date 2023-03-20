@@ -1,0 +1,260 @@
+//1. main.js
+
+// 俄罗斯方块逻辑实现
+
+// 定义方块类型
+const blockType = {
+  I: [
+    [1, 1, 1, 1]
+  ],
+  J: [
+    [1, 0, 0],
+    [1, 1, 1]
+  ],
+  L: [
+    [0, 0, 1],
+    [1, 1, 1]
+  ],
+  O: [
+    [1, 1],
+    [1, 1]
+  ],
+  S: [
+    [0, 1, 1],
+    [1, 1, 0]
+  ],
+  T: [
+    [0, 1, 0],
+    [1, 1, 1]
+  ],
+  Z: [
+    [1, 1, 0],
+    [0, 1, 1]
+  ]
+};
+
+// 定义方块颜色
+const blockColor = {
+  I: 'cyan',
+  J: 'blue',
+  L: 'orange',
+  O: 'yellow',
+  S: 'green',
+  T: 'purple',
+  Z: 'red'
+};
+
+// 定义方块大小
+const blockSize = 20;
+
+// 定义游戏区域大小
+const gameWidth = 10;
+const gameHeight = 20;
+
+// 定义游戏区域
+const gameArea = [];
+
+// 初始化游戏区域
+for (let i = 0; i < gameHeight; i++) {
+  gameArea[i] = [];
+  for (let j = 0; j < gameWidth; j++) {
+    gameArea[i][j] = 0;
+  }
+}
+
+// 定义当前方块
+let currentBlock = null;
+
+// 定义当前方块位置
+let currentBlockX = 0;
+let currentBlockY = 0;
+
+// 定义下一个方块
+let nextBlock = null;
+
+// 定义游戏分数
+let score = 0;
+
+// 定义游戏速度
+let speed = 500;
+
+// 定义游戏是否结束
+let isGameOver = false;
+
+// 生成随机方块
+function generateBlock() {
+  const blockTypes = Object.keys(blockType);
+  const randomIndex = Math.floor(Math.random() * blockTypes.length);
+  const randomType = blockTypes[randomIndex];
+  const block = blockType[randomType];
+  const color = blockColor[randomType];
+  return {
+    block,
+    color
+  };
+}
+
+// 绘制游戏区域
+function drawGameArea() {
+  const canvas = document.getElementById('gameArea');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < gameHeight; i++) {
+    for (let j = 0; j < gameWidth; j++) {
+      if (gameArea[i][j] !== 0) {
+        ctx.fillStyle = gameArea[i][j];
+        ctx.fillRect(j * blockSize, i * blockSize, blockSize, blockSize);
+      }
+    }
+  }
+}
+
+// 绘制方块
+function drawBlock(x, y, block, color) {
+  const canvas = document.getElementById('gameArea');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color;
+  for (let i = 0; i < block.length; i++) {
+    for (let j = 0; j < block[i].length; j++) {
+      if (block[i][j] !== 0) {
+        ctx.fillRect((j + x) * blockSize, (i + y) * blockSize, blockSize, blockSize);
+      }
+    }
+  }
+}
+
+// 检查方块是否可以移动
+function checkBlock(x, y, block) {
+  for (let i = 0; i < block.length; i++) {
+    for (let j = 0; j < block[i].length; j++) {
+      if (block[i][j] !== 0) {
+        const newX = j + x;
+        const newY = i + y;
+        if (newX < 0 || newX >= gameWidth || newY >= gameHeight || gameArea[newY][newX] !== 0) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+// 固定方块
+function fixBlock() {
+  for (let i = 0; i < currentBlock.block.length; i++) {
+    for (let j = 0; j < currentBlock.block[i].length; j++) {
+      if (currentBlock.block[i][j] !== 0) {
+        gameArea[currentBlockY + i][currentBlockX + j] = currentBlock.color;
+      }
+    }
+  }
+}
+
+// 消除行
+function clearLine() {
+  for (let i = gameArea.length - 1; i >= 0; i--) {
+    if (gameArea[i].every(block => block !== 0)) {
+      gameArea.splice(i, 1);
+      gameArea.unshift(new Array(gameWidth).fill(0));
+      score += 10;
+      speed -= 10;
+    }
+  }
+}
+
+// 更新游戏
+function updateGame() {
+  if (isGameOver) {
+    return;
+  }
+  if (currentBlock === null) {
+    currentBlock = generateBlock();
+    currentBlockX = Math.floor(gameWidth / 2) - Math.floor(currentBlock.block[0].length / 2);
+    currentBlockY = 0;
+    if (!checkBlock(currentBlockX, currentBlockY, currentBlock.block)) {
+      isGameOver = true;
+      alert('游戏结束');
+      return;
+    }
+    nextBlock = generateBlock();
+  }
+  if (checkBlock(currentBlockX, currentBlockY + 1, currentBlock.block)) {
+    currentBlockY++;
+  } else {
+    fixBlock();
+    clearLine();
+    currentBlock = nextBlock;
+    currentBlockX = Math.floor(gameWidth / 2) - Math.floor(currentBlock.block[0].length / 2);
+    currentBlockY = 0;
+    if (!checkBlock(currentBlockX, currentBlockY, currentBlock.block)) {
+      isGameOver = true;
+      alert('游戏结束');
+      return;
+    }
+    nextBlock = generateBlock();
+  }
+  drawGameArea();
+  drawBlock(currentBlockX, currentBlockY, currentBlock.block, currentBlock.color);
+  setTimeout(updateGame, speed);
+}
+
+updateGame();
+
+
+
+document.addEventListener('keydown', event => {
+  if (isGameOver) {
+    return;
+  }
+  switch (event.keyCode) {
+    case 37: // 左
+      if (checkBlock(currentBlockX - 1, currentBlockY, currentBlock.block)) {
+        currentBlockX--;
+        drawGameArea();
+        drawBlock(currentBlockX, currentBlockY, currentBlock.block, currentBlock.color);
+      }
+      break;
+    case 38: // 上
+      const rotatedBlock = currentBlock.block[0].map((val, index) => currentBlock.block.map(row => row[index]).reverse());
+      if (checkBlock(currentBlockX, currentBlockY, rotatedBlock)) {
+        currentBlock.block = rotatedBlock;
+        drawGameArea();
+        drawBlock(currentBlockX, currentBlockY, currentBlock.block, currentBlock.color);
+      }
+      break;
+    case 39: // 右
+      if (checkBlock(currentBlockX + 1, currentBlockY, currentBlock.block)) {
+        currentBlockX++;
+        drawGameArea();
+        drawBlock(currentBlockX, currentBlockY, currentBlock.block, currentBlock.color);
+      }
+      break;
+    case 40: // 下
+      if (checkBlock(currentBlockX, currentBlockY + 1, currentBlock.block)) {
+        currentBlockY++;
+        drawGameArea();
+        drawBlock(currentBlockX, currentBlockY, currentBlock.block, currentBlock.color);
+      }
+      break;
+  }
+});
+
+
+
+
+// 2 index.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Canvas Game</title>
+  </head>
+  <body>
+    <canvas id="gameArea" width="200" height="400"></canvas>
+    <script src="D:\main.js"></script>
+  </body>
+</html>
+
+
+
+
