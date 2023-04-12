@@ -26,6 +26,7 @@
 # https://www.topgoer.com/gin%E6%A1%86%E6%9E%B6/
 
 # chatGPT-main.rar 人工智能源码
+# https://cloud.sealos.io  云操作系统
 
 # fanqiang
 
@@ -41,3 +42,5 @@
 
 #python
 1. Python 库让你相见恨晚 https://www.zhihu.com/question/24590883/answer/1220720307
+
+
