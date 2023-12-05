@@ -46,4 +46,214 @@
 # 大电商
 https://www.youzan.com
 
+# Openfaas+NET6自定义模板制作流程
+
+1. net6模板代码编写
+
+接口代码
+```
+using Microsoft.AspNetCore.Mvc;
+
+namespace root.Controllers
+{
+    [ApiController]
+    [Route("[controller]")]
+    public class AddController : ControllerBase
+    {
+        private readonly ILogger<AddController> _logger;
+
+        public AddController(ILogger<AddController> logger)
+        {
+            _logger = logger;
+        }
+
+        [HttpGet]
+        public object Add(string strNumbers)
+        {
+            if (string.IsNullOrWhiteSpace(strNumbers) ||!strNumbers.Contains(",")) 
+                return "请输入：1,2,5";
+            var numbers = strNumbers.Split(",").ToList();
+            var sumRes = numbers.Sum(t => int.Parse(t));
+            return sumRes;
+        }
+    }
+}
+
+```
+
+![img_28.png](img_28.png)
+
+2. docker文件编写
+```
+
+#See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
+
+FROM ghcr.io/openfaas/classic-watchdog:0.2.1 as watchdog
+# 基础镜像
+FROM registry.qevoc.com/dotnet/aspnet:6.0 AS base
+WORKDIR /app
+
+
+FROM registry.qevoc.com/dotnet/sdk:6.0 AS build
+WORKDIR /src
+COPY ["root/root.csproj", "root/"]
+RUN dotnet restore "root/root.csproj"
+COPY . .
+WORKDIR "/src/root"
+RUN dotnet build "root.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "root.csproj" -c Release -o /app/publish /p:UseAppHost=false
+
+FROM build AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+
+# fwatchdog是必须的
+COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
+RUN chmod +x /usr/bin/fwatchdog
+
+
+# 支持https
+ENV fprocess="dotnet dev-certs https  ./root.dll"
+ENV cgi_headers="true"
+# fwatchdog收到web请求后的转发地址，java进程监听的就是这个端口
+ENV upstream_url="http://127.0.0.1:5128"
+# 运行模式是http
+ENV mode="http"
+# 容器对外暴露的端口，也就是fwatchdog进程监听的端口
+EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:5128;https://+:7128
+# 健康检查
+HEALTHCHECK --interval=3s CMD [ -e /tmp/.lock ] || exit 1
+# 容器启动命令，这里是执行二进制文件fwatchdog
+CMD ["fwatchdog"]
+
+```
+
+
+3. template文件编写
+```
+language: net6evoc
+fprocess: dotnet ./root.dll
+welcome_message: |
+```
+
+4. 文件上传到template文件夹
+![img_29.png](img_29.png)
+
+5. 创建一个给予模板net6的自定义函数
+```
+faas-cli new net6test05 --lang netroot -p jxsdpengbin --gateway 172.16.12.146:31112
+```
+![img_30.png](img_30.png)
+
+6. 构建
+``` 
+faas-cli build -f ./net6test05.yml
+```
+![img_31.png](img_31.png)
+
+7. 推送镜像
+```
+docker push jxsdpengbin/net6test05:latest
+```
+![img_32.png](img_32.png)
+
+8. deploy
+```
+faas-cli deploy -f ./net6test05.yml
+```
+![img_33.png](img_33.png)
+
+9. 进入pod内部执行 https认证指令，
+``` 
+kubectl exec -it net6test05-59c44944db-z22dg -c net6test05 -n openfaas-fn bash
+dotnet dev-certs https
+``` 
+![img_36.png](img_36.png)
+
+10. 用nodeport做pod内的端口暴露到容器所在的ip和端口。例如：vim 111.yaml，注意空格对其
+
+``` 
+apiVersion: v1
+kind: Service
+metadata:
+    annotations:
+        prometheus.io.scrape: "false"
+    name: net6test02
+    namespace: openfaas-fn
+spec:
+    type: NodePort
+    ports:
+        - port: 5128
+          name: dslgjd
+          targetPort: 5128
+          nodePort: 30007
+        - port: 7128
+          name: dlsjgl
+          targetPort: 7128
+          nodePort: 30017
+``` 
+应用转换指令
+``` 
+kubectl  apply -f 111.yaml
+``` 
+
+访问连接：
+``` 
+https://172.16.12.146:30017/Add?strNumbers=1,25
+``` 
+![img_35.png](img_35.png)
+
+## 常用问题排查指令
+
+1. 查询所有pod状态
+``` 
+kubectl get pods -n openfaas-fn
+```
+2. 查询pod启动详情
+``` 
+kubectl describe pod net6test02-58bc5494c8-gtr4n -n openfaas-fn
+``` 
+3. 查询pod启动日志
+``` 
+kubectl logs -f net6test05-59c44944db-z22dg -n openfaas-fn
+``` 
+4. 调用 指定ip端口
+``` 
+curl -v 172.20.3.162:8080
+``` 
+
+5. 进入pod内部执行 某些指令，例如:dotnet dev-certs https
+``` 
+kubectl exec -it net6test05-59c44944db-z22dg -c net6test05 -n openfaas-fn bash
+``` 
+6. 编辑某个容器的 deployment 文件。例如读写探针，端口等等
+``` 
+kubectl edit deployment net6test05 -n openfaas-fn
+``` 
+7. 查询svc暴露的端口
+``` 
+kubectl  get svc -n openfaas-fn
+``` 
+
+8. 查询某个容器的 id，名称，等信息
+``` 
+docker ps|grep net6test05
+``` 
+
+9. 根据容器的id 查询某个容器的State.Pid
+``` 
+docker inspect -f '{{.State.Pid}}'  d6010624a714
+``` 
+
+10. 根据容器的pid 进入pod 内容，查看pod内启动的程序，查询完成记得执行 exit退出pod
+``` 
+nsenter -t 11691 -n
+netstat -tnlp
+``` 
+![img_34.png](img_34.png)
+
+
 
