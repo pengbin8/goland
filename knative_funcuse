@@ -1,1 +1,298 @@
-111
+# Knative 云函数发布流程指引
+
+## 发布python 云函数为例
+1. 编写代码python 加法函数,命名为add.py（在文件夹add-python下）
+``` 
+
+from flask import Flask, request, make_response
+import uuid
+
+app = Flask(__name__)
+
+@app.route('/', methods=['POST'])
+def add():
+    app.logger.warning(request.data)
+    array = request.data.replace('\n', '').split(',')
+    rlt = 0
+    for i in array:
+        rlt += int(i)
+    # return rlt
+    # Respond with another event (optional)
+    response = make_response({
+        "msg": "Sum="+str(rlt)
+    })
+    response.headers["Ce-Id"] = str(uuid.uuid4())
+    response.headers["Ce-specversion"] = "0.3"
+    response.headers["Ce-Source"] = "knative/eventing/samples/hello-world"
+    response.headers["Ce-Type"] = "dev.knative.samples.hifromknative"
+    return response
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=8080)
+``` 
+2. 编写Dockerfile
+``` 
+FROM python:3.9-alpine
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+EXPOSE 8080
+ENTRYPOINT [ "python" ]
+CMD [ "add.py" ]
+``` 
+
+3. 编写yaml文件 命名为：sample-app.yml
+```
+# Namespace for sample application with eventing enabled
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: knative-samples
+  labels:
+    eventing.knative.dev/injection: enabled
+---
+# A default broker
+apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: default
+  namespace: knative-samples
+  annotations:
+    # Note: you can set the eventing.knative.dev/broker.class annotation to change the class of the broker.
+    # The default broker class is MTChannelBasedBroker, but Knative also supports use of the other class.
+    eventing.knative.dev/broker.class: MTChannelBasedBroker
+spec: {}
+---
+# add-python app deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: add-python
+  namespace: knative-samples
+spec:
+  replicas: 1
+  selector:
+    matchLabels: &labels
+      app: add-python
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      containers:
+        - name: add-python
+          image: docker.io/{username}/add-python
+          imagePullPolicy: IfNotPresent
+---
+# Service that exposes add-python app.
+# This will be the subscriber for the Trigger
+apiVersion: v1
+kind: Service
+metadata:
+  name: add-python
+  namespace: knative-samples
+spec:
+  selector:
+    app: add-python
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Knative Eventing Trigger to trigger the add-python service
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: add-python
+  namespace: knative-samples
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: dev.knative.samples.helloworld
+      source: dev.knative.samples/helloworldsource
+  subscriber:
+    ref:
+      apiVersion: v1
+      kind: Service
+      name: add-python
+
+
+```
+
+4. 文件所在位置图
+![img_4.png](img_4.png)
+
+5. 编译代码到容器并push
+``` 
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-python" --push .
+``` 
+
+6. apply yml
+``` 
+kubectl apply --filename service.yaml
+``` 
+
+7. 查看pod内程序启动信息，以及暴露接口
+
+``` 
+kubectl get pods -n knative-samples
+kubectl logs -f add-python2-5b79b9c4b-2lkxz -n knative-samples
+``` 
+![img_5.png](img_5.png)
+![img_6.png](img_6.png)
+
+8. 接口调用指令以及返回结果
+``` 
+curl -v http://172.20.3.179:8080 \
+-X POST \
+-H "Ce-Id: 536808d3-88be-4077-9d7a-a3f162705f79" \
+-H "Ce-specversion: 0.3" \
+-H "Ce-Type: dev.knative.samples.helloworld" \
+-H "Ce-Source: dev.knative.samples/helloworldsource" \
+-H "Content-Type: application/json" \
+-d '8,8,9'
+``` 
+![img_7.png](img_7.png)
+
+## 发布php 云函数为例
+
+1. 编写php加法函数
+``` 
+<?php
+   $target = getenv('TARGET', true) ?: '0';
+   $numbers=str_split($target);
+   $sum=array_sum($numbers);
+   echo sprintf("Sum= %s!\n", $sum);
+   ?>
+``` 
+2. 编写dockerfile文件
+``` 
+# Use the official PHP 7.3 image.
+# https://hub.docker.com/_/php
+FROM php:7.3-apache
+
+# Copy local code to the container image.
+COPY index.php /var/www/html/
+
+# Use the PORT environment variable in Apache configuration files.
+RUN sed -i 's/80/${PORT}/g' /etc/apache2/sites-available/000-default.conf /etc/apache2/ports.conf
+
+# Configure PHP for development.
+# Switch to the production php.ini for production operations.
+# RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+# https://hub.docker.com/_/php#configuration
+RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
+
+``` 
+3. 编写yaml文件
+``` 
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: add-php
+  namespace: knative-samples
+spec:
+  template:
+    spec:
+      containers:
+      - image: docker.io/jxsdpengbin/add-php
+        env:
+        - name: TARGET
+          value: "2,9,2,8,5"
+``` 
+4. 代码文件结构
+ 
+![img_8.png](img_8.png)
+
+5. 编译代码到容器并push
+``` 
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-php" --push .
+``` 
+![img_9.png](img_9.png)
+
+6. apply yml
+``` 
+kubectl apply --filename service.yaml
+```
+![img_10.png](img_10.png)
+
+7. 查看pod内程序启动信息，以及暴露接口
+``` 
+kubectl get pods -n knative-samples
+kubectl describe pod add-php-00001-deployment-75bfffcf6b-n4zzp -n knative-samples
+``` 
+![img_11.png](img_11.png)
+
+8. 接口调用指令以及返回结果
+```
+curl http://172.20.3.191:8080
+```
+![img_12.png](img_12.png)
+
+9. 遗留问题 
+9.1 60s之后，pod状态变更Terminating,不久之后pod就消失，如果需要再次调用，重新修改 service.yaml，执行步骤6,7,8
+
+
+
+
+## 常用问题排查指令
+
+1. 查询所有pod状态
+``` 
+kubectl get pods -n knative-samples
+```
+2. 查询pod启动详情
+``` 
+kubectl describe pod webadd-00001-deployment-595c7d8c76-vr8xb -n knative-samples
+``` 
+3. 查询pod启动日志
+``` 
+kubectl logs -f webadd-00001-deployment-595c7d8c76-vr8xb -n knative-samples
+``` 
+4. 调用 指定ip端口
+``` 
+curl -v 172.20.3.162:8080
+``` 
+
+5. 进入pod内部执行 某些指令，例如:dotnet dev-certs https
+``` 
+kubectl exec -it webadd-00001-deployment-595c7d8c76-vr8xb -c user-container -n knative-samples bash
+``` 
+6. 编辑某个容器的 deployment 文件。例如读写探针，端口等等
+``` 
+kubectl edit deployment webadd-00001-deployment-595c7d8c76-vr8xb -n knative-samples
+``` 
+7. 查询svc暴露的端口
+``` 
+kubectl  get svc -n knative-samples
+``` 
+
+8. 查询某个容器的 id，名称，等信息
+``` 
+docker ps|grep webadd-00001-deployment-595c7d8c76-vr8xb
+``` 
+
+9. 根据容器的id 查询某个容器的State.Pid
+``` 
+docker inspect -f '{{.State.Pid}}'  d6010624a714
+``` 
+
+10. 根据容器的pid 进入pod 内容，查看pod内启动的程序，查询完成记得执行 exit退出pod
+``` 
+nsenter -t 11691 -n
+netstat -tnlp
+``` 
+
+11. 其他常用指令
+``` 
+    kubectl apply --filename sample-app.yaml
+    kubectl get svc -n knative-samples
+    kubectl get pods -n knative-samples
+    kubectl get deploy -n knative-samples
+    kubectl logs -f haddnet6-00001-deployment-74f59d7495-6zhfg -n knative-samples
+    kubectl describe pod add-php-00001-deployment-75bfffcf6b-n4zzp -n knative-samples
+    kubectl edit deployment helloworld-php2-00001-deployment
+    kubectl edit deploy webadd-00001-deployment -n knative-samples
+``` 
+
+
