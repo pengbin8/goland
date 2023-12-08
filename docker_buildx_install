@@ -1,0 +1,88 @@
+# knative_install
+一、	部署过程
+knative镜像源在国外，拉取不到，目前部署的是1.0.2版本；
+1、	若安装1.9+的版本，需先安装cosign和jq；
+cosign：https://docs.sigstore.dev/system_config/installation/
+jq: https://jqlang.github.io/jq/
+2、	部署knative：
+kubectl  apply  -f  https://github.com/knative/serving/releases/download/knative-v1.0.2/serving-crds.yaml
+kubectl  apply  -f  https://github.com/knative/serving/releases/download/knative-v1.0.2/serving-core.yaml
+需要注意的是：knative的镜像源在国外，若没有科学上网方式的话，可以将以上两个文件下载下来，修改其中 的镜像地址，将“gcr.io”修改为“gcr.lank8s.cn”，修改后也可能会拉取失败，多试几次即可。
+3、	安装网络层kourier（也可使用istoio/contour，推荐kourier）
+kubectl  apply  -f  https://github.com/knative/net-kourier/releases/download/knative-v1.1.0/kourier.yaml
+若无法安装，同2
+4、	配置网络层
+kubectl patch configmap/config-network \
+  --namespace knative-serving \
+  --type merge \
+  --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
+三、	参考文档
+https://knative.dev/docs/install/yaml-install/serving/install-serving-with-yaml/
+https://www.cnblogs.com/zyyang1993/p/16775961.html
+https://www.cnblogs.com/renshengdezheli/p/16814395.html
+https://jqlang.github.io/jq/
+https://docs.sigstore.dev/system_config/installation/
+
+
+
+# docker_buildx_install  参考资料：https://www.cjavapy.com/article/2839/
+
+1. 查看 experimental是否开启
+``` 
+docker info
+``` 
+![img_13.png](img_13.png)
+
+查看buildx 是否已经安装
+``` 
+docker buildx version
+``` 
+![img_14.png](img_14.png)
+
+2. 如果experimental 开启则跳过本步骤
+``` 
+vi ~/.docker/config.json 
+``` 
+加入节点 "experimental":"enabled"
+
+![img_15.png](img_15.png)
+``` 
+vi /etc/docker/daemon.json
+``` 
+加入节点 "experimental":true
+
+![img_16.png](img_16.png)
+
+使用节点生效，重启服务
+``` 
+systemctl daemon-reload
+systemctl restart docker
+``` 
+3. 创建cli-plugins文件夹，并将buildx移入其中，并对其增加权限，下载地址 https://github.com/docker/buildx/releases/tag/v0.9.1
+buildx-v0.9.1.liunx-amd64 在文档中一并存在
+``` 
+mkdir -p /usr/local/lib/docker/cli-plugins
+mv /tmp/buildx-v0.9.1.liunx-amd64 /usr/local/lib/docker/cli-plugins/docker-buildx
+chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+``` 
+![img_17.png](img_17.png)
+
+5. 判断安装成功
+``` 
+docker buildx version
+``` 
+![img_18.png](img_18.png)
+
+7. 安装buildx模拟器
+``` 
+docker buildx ls
+docker run --privileged --rm tonistiigi/binfmt --install all
+``` 
+![img_20.png](img_20.png)
+
+9. 检查buildx模拟器安装成功与否
+``` 
+cat /proc/sys/fs/binfmt_misc/qemu-aarch64
+``` 
+![img_19.png](img_19.png)
+  
