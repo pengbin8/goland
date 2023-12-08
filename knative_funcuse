@@ -3,7 +3,6 @@
 ## 发布python 云函数为例
 1. 编写代码python 加法函数,命名为add.py（在文件夹add-python下）
 ``` 
-
 from flask import Flask, request, make_response
 import uuid
 
@@ -136,14 +135,14 @@ kubectl apply --filename service.yaml
 
 ``` 
 kubectl get pods -n knative-samples
-kubectl logs -f add-python2-5b79b9c4b-2lkxz -n knative-samples
+kubectl logs -f add-python3-67d796c5b6-8bwn2 -n knative-samples
 ``` 
 ![img_5.png](img_5.png)
 ![img_6.png](img_6.png)
 
 8. 接口调用指令以及返回结果
 ``` 
-curl -v http://172.20.3.179:8080 \
+curl -v http://172.20.4.110:8080 \
 -X POST \
 -H "Ce-Id: 536808d3-88be-4077-9d7a-a3f162705f79" \
 -H "Ce-specversion: 0.3" \
@@ -175,6 +174,7 @@ FROM php:7.3-apache
 COPY index.php /var/www/html/
 
 # Use the PORT environment variable in Apache configuration files.
+ENV PORT 80 #定义环境变量端口80
 RUN sed -i 's/80/${PORT}/g' /etc/apache2/sites-available/000-default.conf /etc/apache2/ports.conf
 
 # Configure PHP for development.
@@ -186,53 +186,658 @@ RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 ``` 
 3. 编写yaml文件
 ``` 
-apiVersion: serving.knative.dev/v1
-kind: Service
+# Namespace for sample application
+apiVersion: v1
+kind: Namespace
 metadata:
-  name: add-php
+  name: knative-samples
+---
+# A default broker
+apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: default
+  namespace: knative-samples
+  annotations:
+    # Note: you can set the eventing.knative.dev/broker.class annotation to change the class of the broker.
+    # The default broker class is MTChannelBasedBroker, but Knative also supports use of the other class.
+    eventing.knative.dev/broker.class: MTChannelBasedBroker
+spec: {}
+---
+# Helloworld-go app deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: add-php1
   namespace: knative-samples
 spec:
+  replicas: 1
+  selector:
+    matchLabels: &labels
+      app: add-php1
   template:
+    metadata:
+      labels: *labels
     spec:
       containers:
-      - image: docker.io/jxsdpengbin/add-php
-        env:
-        - name: TARGET
-          value: "2,9,2,8,5"
+        - name: add-php1
+          image: docker.io/jxsdpengbin/add-php1
+          env:
+          - name: TARGET
+            value: "8,9,5"
+---
+# Service that exposes helloworld-go app.
+# This will be the subscriber for the Trigger
+apiVersion: v1
+kind: Service
+metadata:
+  name: add-php1
+  namespace: knative-samples
+spec:
+  selector:
+    app: add-php1
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Knative Eventing Trigger to trigger the helloworld-go service
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: add-php2
+  namespace: knative-samples
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: dev.knative.samples.helloworld
+      source: dev.knative.samples/helloworldsource
+  subscriber:
+    ref:
+      apiVersion: v1
+      kind: Service
+      name: add-php1
 ``` 
 4. 代码文件结构
- 
+``` 
 ![img_8.png](img_8.png)
-
+``` 
 5. 编译代码到容器并push
 ``` 
-docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-php" --push .
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-php1" --push .
 ``` 
-![img_9.png](img_9.png)
 
-6. apply yml
+
+6. apply yaml
 ``` 
-kubectl apply --filename service.yaml
+kubectl apply --filename sample-app.yaml
 ```
-![img_10.png](img_10.png)
+![img_19.png](img_19.png)
 
 7. 查看pod内程序启动信息，以及暴露接口
 ``` 
 kubectl get pods -n knative-samples
-kubectl describe pod add-php-00001-deployment-75bfffcf6b-n4zzp -n knative-samples
+kubectl describe pod add-php1-658f47f8b6-b47vj -n knative-samples
 ``` 
-![img_11.png](img_11.png)
+![img_20.png](img_20.png)
 
 8. 接口调用指令以及返回结果
 ```
-curl http://172.20.3.191:8080
+curl http://172.20.4.130
 ```
-![img_12.png](img_12.png)
+![img_18.png](img_18.png)
 
-9. 遗留问题 
-9.1 60s之后，pod状态变更Terminating,不久之后pod就消失，如果需要再次调用，重新修改 service.yaml，执行步骤6,7,8
+## 发布go 云函数为例
+1. 编写函数代码
+```
+package main
+
+import (
+	"context"
+	"log"
+	"strconv"
+	"strings"
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/google/uuid"
+)
+
+func receive(ctx context.Context, event cloudevents.Event) (*cloudevents.Event, cloudevents.Result) {
+	log.Printf("Event received. \n%s\n", event)
+	data := &HelloWorld{}
+	if err := event.DataAs(data); err != nil {
+		log.Printf("Error while extracting cloudevent Data: %s\n", err.Error())
+		return nil, cloudevents.NewHTTPResult(400, "failed to convert data: %s", err)
+	}
+	log.Printf("Hello World Message from received event %q", data.Msg)
+	sum :=0
+	strs :=strings.Split(data.Msg,",")
+
+	for _, s := range strs {
+		num, err :=strconv.Atoi(s)
+		if err !=nil{
+			log.Printf("转换出错\n%s\n",err)
+			continue
+		}
+		sum += num
+	}
+	log.Printf("sum=\n%s\n", sum)
+	newEvent := cloudevents.NewEvent()
+	newEvent.SetID(uuid.New().String())
+	newEvent.SetSource("knative/eventing/samples/hello-world")
+	newEvent.SetType("dev.knative.samples.hifromknative")
+	if err := newEvent.SetData(cloudevents.ApplicationJSON, HiFromKnative{
+		Msg: "Sum =!"+strconv.Itoa(sum)
+	}); err != nil {
+		return nil, cloudevents.NewHTTPResult(500, "failed to set response data: %s", err)
+	}
+	log.Printf("Responding with event\n%s\n", newEvent)
+	return &newEvent, nil
+}
+
+func main() {
+	log.Print("Hello world sample started.")
+	c, err := cloudevents.NewDefaultClient()
+	if err != nil {
+		log.Fatalf("failed to create client, %v", err)
+	}
+	log.Fatal(c.StartReceiver(context.Background(), receive))
+}
+
+```
+
+2. 编写dockefile文件
+```
+FROM golang:1.14 as builder
+
+ARG TARGETOS
+ARG TARGETARCH
+
+# Copy local code to the container image.
+WORKDIR /app
+
+# Retrieve application dependencies using go modules.
+# Allows container builds to reuse downloaded dependencies.
+COPY go.* ./
+RUN go env -w GOPROXY=https://goproxy.cn #设置国内代理
+#COPY go.* ./
+RUN go mod download
+
+# Copy local code to the container image.
+COPY . ./
+
+# Build the binary.
+# -mod=readonly ensures immutable go.mod and go.sum in container builds.
+RUN CGO_ENABLED=0 GOOS=linux GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -mod=readonly  -v -o helloworld
+
+# Use a Docker multi-stage build to create a lean production image.
+# https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
+FROM alpine:3
+RUN apk add --no-cache ca-certificates
+
+# Copy the binary to the production image from the builder stage.
+COPY --from=builder /app/helloworld /helloworld
+
+# Run the web service on container startup.
+CMD ["/add"]
+```
+
+3. 编写yaml
+```
+# Namespace for sample application
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: knative-samples
+---
+# A default broker
+apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: default
+  namespace: knative-samples
+  annotations:
+    # Note: you can set the eventing.knative.dev/broker.class annotation to change the class of the broker.
+    # The default broker class is MTChannelBasedBroker, but Knative also supports use of the other class.
+    eventing.knative.dev/broker.class: MTChannelBasedBroker
+spec: {}
+---
+# add-go app deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: add-go
+  namespace: knative-samples
+spec:
+  replicas: 1
+  selector:
+    matchLabels: &labels
+      app: add-go
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      containers:
+        - name: add-go
+          image: docker.io/jxsdpengbin/add-go
+---
+# Service that exposes add-go app.
+# This will be the subscriber for the Trigger
+apiVersion: v1
+kind: Service
+metadata:
+  name: add-go
+  namespace: knative-samples
+spec:
+  selector:
+    app: add-go
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Knative Eventing Trigger to trigger the add-go service
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: add-go
+  namespace: knative-samples
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: dev.knative.samples.helloworld
+      source: dev.knative.samples/helloworldsource
+  subscriber:
+    ref:
+      apiVersion: v1
+      kind: Service
+      name: add-go
 
 
+```
+4. 文件结构
+![img_13.png](img_13.png)
+5. 编译代码到容器并push
+```
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-go" --push .
+```
+![img_14.png](img_14.png)
+6. apply yaml
+```
+kubectl apply --filename sample-app.yaml
+```
+![img_15.png](img_15.png)
+7. 查看pod内程序启动信息，以及暴露接口
+```
+kubectl get pods -n knative-samples
+kubectl describe pod add-go-5b74fb7858-tkltf -n knative-samples
+kubectl get svc -n knative-samples
+```
+![img_16.png](img_16.png)
+8. 接口调用指令以及返回结果
+```
+curl -v "10.68.169.201" \
+-X POST \
+-H "Ce-Id: 536808d3-88be-4077-9d7a-a3f162705f79" \
+-H "Ce-Specversion: 1.0" \
+-H "Ce-Type: dev.knative.samples.helloworld" \
+-H "Ce-Source: dev.knative.samples/helloworldsource" \
+-H "Content-Type: application/json" \
+-d '{"msg":"9,9,89"}'
+```
+![img_17.png](img_17.png)
+
+
+
+
+
+
+kubectl get svc -n knative-samples
+kubectl get pods -n knative-samples
+kubectl get deploy -n knative-samples
+kubectl logs -f add-go-5b74fb7858-tkltf -n knative-samples
+kubectl describe pod add-go-5b74fb7858-tkltf -n knative-samples
+kubectl edit deployment helloworld-go-5bb5968765-wlszh
+kubectl edit deploy helloworld-go -n knative-samples
+
+## 发布nodejs云函数
+1. 云函数代码编写
+``` 
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+
+  console.log('received a request.');
+
+  const target = process.env.TARGET || '0';
+  const numbers=target.split(',').map(Number);
+  const sum=numbers.reduce((acc,num)=>acc+num,0);
+  console.log('sum=',sum);
+  res.send(`sum= ${sum}!\n`);
+});
+
+const port = process.env.PORT || 8080;
+app.listen(port, () => {
+  console.log('Hello world listening on port', port);
+});
+
+```
+2. 编写dockerfile
+``` 
+FROM node:12-slim
+
+# Create and change to the app directory.
+WORKDIR /usr/src/app
+
+# Copy application dependency manifests to the container image.
+# A wildcard is used to ensure both package.json AND package-lock.json are copied.
+# Copying this separately prevents re-running npm install on every code change.
+COPY package*.json ./
+
+# Install production dependencies.
+RUN npm install --only=production
+
+# Copy local code to the container image.
+COPY . ./
+
+# Run the web service on container startup.
+CMD [ "npm", "start" ]
+```
+3. 编写yaml
+``` 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: knative-samples
+  labels:
+    eventing.knative.dev/injection: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: add-nodejs2
+  namespace: knative-samples
+spec:
+  replicas: 1
+  selector:
+    matchLabels: &labels
+      app: add-nodejs2
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      containers:
+        - name: add-nodejs2
+          image: docker.io/jxsdpengbin/add-nodejs2
+          env:
+          - name: TARGET
+            value: "8,9,5,33,4"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: add-nodejs2
+  namespace: knative-samples
+spec:
+  selector:
+    app: add-nodejs2
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+
+```
+4. 文件目录结构
+![img_21.png](img_21.png)
+
+5. 发布云函数
+``` 
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-nodejs2" --push .
+kubectl apply --filename service.yaml
+```
+![img_22.png](img_22.png)
+![img_23.png](img_23.png)
+6. 云函数调用
+``` 
+kubectl get pods -n knative-samples
+kubectl describe pod add-nodejs2-568cb75c5d-2sb96 -n knative-samples 
+curl http://172.20.4.108:8080
+curl http://10.68.113.120:30057 #NodePort转换有问题，运维张强在排查
+```
+![img_24.png](img_24.png)
+![img_25.png](img_25.png)
+
+## 发布net6 云函数
+1. 编写函数代码
+``` 
+var builder = WebApplication.CreateBuilder(args);
+
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+var url = $"http://0.0.0.0:{port}";
+var target = Environment.GetEnvironmentVariable("TARGET") ?? "0";
+
+var app = builder.Build();
+
+app.MapGet("/",(string strNumbers) => {
+    var total = strNumbers.Split(",").Select(s => Int32.Parse(s)).Sum();
+    return $"sum= {total}!";
+});
+
+app.Run(url);
+
+```
+2. 编写dockerfile文件
+``` 
+# Use Microsoft's official build .NET image.
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build-env
+WORKDIR /app
+
+# Copy csproj and restore as distinct layers
+COPY *.csproj ./
+RUN dotnet restore
+
+# Copy everything else and build
+COPY . ./
+RUN dotnet publish -c Release -o out
+
+# Build runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:6.0
+WORKDIR /app
+COPY --from=build-env /app/out .
+
+# Run the web service on container startup.
+ENTRYPOINT ["dotnet", "helloworld-csharp.dll"]
+
+```
+3. 编写yaml文件
+``` 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: knative-samples
+  labels:
+    eventing.knative.dev/injection: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: add-net6
+  namespace: knative-samples
+spec:
+  replicas: 1
+  selector:
+    matchLabels: &labels
+      app: add-net6
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      containers:
+        - name: add-net6
+          image: docker.io/jxsdpengbin/add-net6
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: add-net6
+  namespace: knative-samples
+spec:
+  selector:
+    app: add-net6
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+
+```
+4. 文件结构目录
+![img_26.png](img_26.png)
+5. 函数发布
+``` 
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-net6" --push .
+kubectl apply --filename service.yaml
+```
+![img_27.png](img_27.png)
+
+6. 函数调用
+``` 
+kubectl get pods -n knative-samples
+kubectl describe pod add-nodejs2-568cb75c5d-2sb96 -n knative-samples 
+# 容器内的ip：port访问
+curl http://172.20.4.146:8080/?strNumbers=3,2,4,3,2
+# 容器对外暴露的ip：port访问
+curl http://10.68.156.241:80/?strNumbers=3,2,4,3,2
+```
+![img_28.png](img_28.png)
+![img_29.png](img_29.png)
+
+## 发布java云函数
+1. 编写函数代码
+``` 
+package com.example.helloworld;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Arrays;
+
+@SpringBootApplication
+public class HelloworldApplication {
+
+  @Value("${TARGET:World}")
+  String target;
+
+  @RestController
+  class HelloworldController {
+    @GetMapping("/")
+    String hello(String strNumbers) {
+      int sum=0;
+      String[] strNums=strNumbers.split(",");
+      for (String str :strNums){
+        sum+=Integer.parseInt(str);
+      }
+      return "sum= " + sum + "!";
+    }
+  }
+
+  public static void main(String[] args) {
+    SpringApplication.run(HelloworldApplication.class, args);
+  }
+}
+
+```
+2. 编写dockerfile文件
+``` 
+# Use the official maven/Java 8 image to create a build artifact: https://hub.docker.com/_/maven
+FROM maven:3.5-jdk-8-alpine as builder
+
+# Copy local code to the container image.
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+
+# Build a release artifact.
+RUN mvn package -DskipTests
+
+# Use the Official OpenJDK image for a lean production stage of our multi-stage build.
+# https://hub.docker.com/_/openjdk
+# https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
+FROM openjdk:8-jre-alpine
+
+# Copy the jar to the production image from the builder stage.
+COPY --from=builder /app/target/helloworld-*.jar /helloworld.jar
+
+# Run the web service on container startup.
+CMD ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/helloworld.jar"]
+
+```
+3. 编写yaml文件
+``` 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: knative-samples
+  labels:
+    eventing.knative.dev/injection: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: add-javaopenjdk8
+  namespace: knative-samples
+spec:
+  replicas: 1
+  selector:
+    matchLabels: &labels
+      app: add-javaopenjdk8
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      containers:
+        - name: add-javaopenjdk8
+          image: docker.io/jxsdpengbin/add-javaopenjdk8
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: add-javaopenjdk8
+  namespace: knative-samples
+spec:
+  selector:
+    app: add-javaopenjdk8
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+
+```
+4. 文件结构目录
+![img_30.png](img_30.png)
+5. 函数发布
+``` 
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-javaopenjdk8" --push .
+kubectl apply --filename service.yaml
+```
+![img_31.png](img_31.png)
+
+6. 函数调用
+``` 
+kubectl get pods -n knative-samples
+kubectl get svc -n knative-samples
+kubectl describe pod add-javaopenjdk8-568cb75c5d-2sb96 -n knative-samples 
+# 容器内的ip：port访问
+curl http://172.20.4.149:8080/?strNumbers=1,2,366 
+# 容器对外暴露的ip：port访问
+curl http://10.68.172.81:80?strNumbers=1212,2323
+```
+![img_32.png](img_32.png)
+![img_33.png](img_33.png)
 
 
 ## 常用问题排查指令
@@ -243,7 +848,7 @@ kubectl get pods -n knative-samples
 ```
 2. 查询pod启动详情
 ``` 
-kubectl describe pod webadd-00001-deployment-595c7d8c76-vr8xb -n knative-samples
+kubectl describe pod add-php2-c6d8f4c-ll5bp -n knative-samples
 ``` 
 3. 查询pod启动日志
 ``` 
@@ -256,7 +861,7 @@ curl -v 172.20.3.162:8080
 
 5. 进入pod内部执行 某些指令，例如:dotnet dev-certs https
 ``` 
-kubectl exec -it webadd-00001-deployment-595c7d8c76-vr8xb -c user-container -n knative-samples bash
+kubectl exec -it add-php2-c6d8f4c-ll5bp -c add-php2 -n knative-samples bash
 ``` 
 6. 编辑某个容器的 deployment 文件。例如读写探针，端口等等
 ``` 
@@ -269,7 +874,7 @@ kubectl  get svc -n knative-samples
 
 8. 查询某个容器的 id，名称，等信息
 ``` 
-docker ps|grep webadd-00001-deployment-595c7d8c76-vr8xb
+docker ps|grep add-php2-c6d8f4c-ll5bp
 ``` 
 
 9. 根据容器的id 查询某个容器的State.Pid
@@ -285,14 +890,16 @@ netstat -tnlp
 
 11. 其他常用指令
 ``` 
-    kubectl apply --filename sample-app.yaml
-    kubectl get svc -n knative-samples
-    kubectl get pods -n knative-samples
-    kubectl get deploy -n knative-samples
-    kubectl logs -f haddnet6-00001-deployment-74f59d7495-6zhfg -n knative-samples
-    kubectl describe pod add-php-00001-deployment-75bfffcf6b-n4zzp -n knative-samples
-    kubectl edit deployment helloworld-php2-00001-deployment
-    kubectl edit deploy webadd-00001-deployment -n knative-samples
-``` 
+docker buildx build --platform linux/amd64 -t "jxsdpengbin/add-nodejs2" --push .
+kubectl apply --filename service.yaml
+kubectl get svc -n knative-samples
+kubectl get pods -n knative-samples
+kubectl get deploy -n knative-samples
+kubectl logs -f add-nodejs-947df57b4-4gns8 -n knative-samples
+kubectl describe pod add-nodejs-947df57b4-4gns8 -n knative-samples
+kubectl edit deployment add-php2-c6d8f4c-ll5bp
+kubectl edit deploy add-php2 -n knative-samples   
+```
+
 
 
