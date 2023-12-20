@@ -22,7 +22,7 @@
 # https://www.liwenzhou.com/posts/Go/golang-menu/
 # https://github.com/coderit666/GoGuide
 # https://gin-gonic.com/zh-cn/docs/examples/multipart-urlencoded-binding/
-# https://www.cnblogs.com/liwenzhou/p/13629767.html
+# 
 # https://www.topgoer.com/gin%E6%A1%86%E6%9E%B6/
 
 # chatGPT-main.rar 人工智能源码
@@ -42,6 +42,12 @@
 
 #python
 1. Python 库让你相见恨晚 https://www.zhihu.com/question/24590883/answer/1220720307
+2. https://c.biancheng.net/django/
+3. https://flask.github.net.cn/quickstart.html#id2
+
+#go
+1. https://www.topgoer.com/gin%E6%A1%86%E6%9E%B6/
+2. https://www.cnblogs.com/liwenzhou/p/13629767.html
 
 # 大电商
 https://www.youzan.com
